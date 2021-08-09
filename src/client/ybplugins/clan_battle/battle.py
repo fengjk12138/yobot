@@ -853,10 +853,10 @@ class ClanBattle:
             if boss_num == 0:
                 raise UserError('您已经在树上了')
             raise UserError('您已经预约过了')
-        if (boss_num == 0 and group.challenging_member_qq_id == qqid):
-            # 如果挂树时当前正在挑战，则取消挑战
-            group.challenging_member_qq_id = None
-            group.save()
+        # if (boss_num == 0 and group.challenging_member_qq_id == qqid):
+        #     # 如果挂树时当前正在挑战，则取消挑战
+        #     group.challenging_member_qq_id = None
+        #     group.save()
         subscribe = Clan_subscribe.create(
             gid=group_id,
             qqid=qqid,
@@ -981,7 +981,9 @@ class ClanBattle:
         if (appli_type != 1) and (extra_msg is None):
             raise InputError('锁定boss时必须留言')
         # 因为支持多人申请，所以能否申请则只查看是否有管理员锁定
-        if group.challenging_member_qq_id is not None and group.boss_lock_type != 1:
+        p = Clan_ischallenging.get_or_none(gid=group_id, qqid=qqid)
+        # 锁定了，并且他没有申请过，申请过的话，即使锁定也可以更新出刀
+        if group.challenging_member_qq_id is not None and group.boss_lock_type != 1 and p is None:
             nik = self._get_nickname_by_qqid(
                 group.challenging_member_qq_id,
             ) or group.challenging_member_qq_id
@@ -1009,7 +1011,7 @@ class ClanBattle:
                 # raise GroupError("更新出刀信息前需要申请出刀")
                 # 无则插入，有则更新
                 if p is None:
-                    p = Clan_ischallenging.create(
+                    Clan_ischallenging.create(
                         gid=group_id,
                         qqid=qqid,
                         message=extra_msg
@@ -1019,12 +1021,12 @@ class ClanBattle:
                     p.qqid = qqid,
                     p.message = extra_msg
                     p.save()
-
-        group.challenging_member_qq_id = qqid
-        group.challenging_start_time = int(time.time())
-        group.challenging_comment = extra_msg
-        group.boss_lock_type = appli_type
-        group.save()
+        if appli_type == 2 or group.boss_lock_type != 2:
+            group.challenging_member_qq_id = qqid
+            group.challenging_start_time = int(time.time())
+            group.challenging_comment = extra_msg
+            group.boss_lock_type = appli_type
+            group.save()
         challenging = Clan_ischallenging.filter(gid=group_id)
         nik = self._get_nickname_by_qqid(qqid) or qqid
         nik = escape(nik)
@@ -1069,8 +1071,9 @@ class ClanBattle:
             if user.authority_group >= 100:
                 raise GroupError('只有管理员才能解锁')
             # 成功解锁
-            group.challenging_member_qq_id = None
-
+            group.boss_lock_type = 1
+            p = Clan_ischallenging.get_or_none(gid=group_id)
+            group.challenging_member_qq_id = None if p is None else p.qqid
         else:  # 取消申请命令
             # 没有申请挑战，在挑战表查无此人
             if Clan_ischallenging.filter(gid=group_id, qqid=qqid).count() == 0:
