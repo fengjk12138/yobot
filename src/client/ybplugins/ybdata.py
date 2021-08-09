@@ -145,6 +145,13 @@ class User_box(_BaseModel):
     class Meta:
         primary_key = CompositeKey('qqid', 'chid')
 
+class Clan_ischallenging(_BaseModel): #正在挑战boss或者正在参与挑战的人的信息
+    qqid = BigIntegerField()
+    gid = BigIntegerField(index=True)
+    message = TextField(null=True)
+
+    class Meta:
+        primary_key = CompositeKey('qqid', 'gid')
 
 class DB_schema(_BaseModel):
     key = CharField(max_length=64, primary_key=True)
@@ -174,6 +181,7 @@ def init(sqlite_filename):
         Clan_group.create_table()
         Clan_member.create_table()
         Clan_challenge.create_table()
+        Clan_ischallenging.create_table()
         Clan_subscribe.create_table()
         Character.create_table()
         User_box.create_table()
