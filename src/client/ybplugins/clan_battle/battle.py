@@ -975,8 +975,9 @@ class ClanBattle:
         group = Clan_group.get_or_none(group_id=group_id)
         if group is None:
             raise GroupNotExist
-        user = User.get_or_none(qqid=qqid, clan_group_id=group_id)
-        if user is None:
+        is_member = is_member = Clan_member.get_or_none(
+            group_id=group_id, qqid=qqid)
+        if is_member is None:
             raise UserNotInGroup
         if (appli_type != 1) and (extra_msg is None):
             raise InputError('锁定boss时必须留言')
@@ -1697,6 +1698,9 @@ class ClanBattle:
                 _logger.info('群聊 失败 {} {} {}'.format(user_id, group_id, cmd))
                 return '您没有' + event
             _logger.info('群聊 成功 {} {} {}'.format(user_id, group_id, cmd))
+            if event == '挂树':
+                self.apply_for_challenge(
+                    group_id, user_id, extra_msg='已取消挂树', appli_type=1)
             return '已取消' + event
         elif match_num == 26:  # 强制取消
             match = re.match(
