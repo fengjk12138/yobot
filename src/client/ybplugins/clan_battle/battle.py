@@ -841,8 +841,12 @@ class ClanBattle:
         group = Clan_group.get_or_none(group_id=group_id)
         if group is None:
             raise GroupNotExist
-        user = User.get_or_none(qqid=qqid, clan_group_id=group_id)
-        if user is None:
+        # user = User.get_or_none(qqid=qqid, clan_group_id=group_id)
+        # if user is None:
+        #     raise GroupError('请先加入公会')
+        is_member = Clan_member.get_or_none(
+            group_id=group_id, qqid=qqid)
+        if not is_member:
             raise GroupError('请先加入公会')
         subscribe = Clan_subscribe.get_or_none(
             gid=group_id,
@@ -949,9 +953,9 @@ class ClanBattle:
             except peewee.DoesNotExist:
                 _logger.warning('预约者用户不存在')
                 continue
-            if notify_user.notify_preference == 1:
-                subscribe.delete_instance()
-                continue
+            # if notify_user.notify_preference == 1:
+            #     subscribe.delete_instance()
+            #     continue
         if notice:
             asyncio.ensure_future(self.api.send_group_msg(
                 group_id=group_id,
