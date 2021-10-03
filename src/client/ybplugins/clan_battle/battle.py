@@ -318,7 +318,7 @@ class ClanBattle:
 
         return membership
 
-    def get_challenger_info(self, challenging):
+    def get_challenger_info(self, challenging, group_id):
         """
         Args:
             challenging: An iterable list of challenges
@@ -329,8 +329,34 @@ class ClanBattle:
         for x in challenging:
             nik = escape(self._get_nickname_by_qqid(x.qqid)
                          or x.qqid)
+            nik = nik[:6]
             info = x.message
-            res += f'\n-> {nik}: {info},' if info is not None else f'\n-> {nik},'
+            # 获取这个人的出刀信息
+
+            group = Clan_group.get_or_none(group_id=group_id)
+            d, t = pcr_datetime(area=group.game_server)
+            challenges = Clan_challenge.select().where(
+                Clan_challenge.gid == group_id,
+                Clan_challenge.qqid == x.qqid,
+                Clan_challenge.bid == group.battle_id,
+                Clan_challenge.challenge_pcrdate == d,
+            ).order_by(Clan_challenge.cid)
+            challenges = list(challenges)
+            finished = sum(bool(c.boss_health_ramain or c.is_continue)
+                           for c in challenges)
+
+            is_continue = (challenges
+                           and challenges[-1].boss_health_ramain == 0
+                           and not challenges[-1].is_continue)
+
+            membership = Clan_member.get_or_none(
+                group_id=group_id, qqid=x.qqid)
+            today, _ = pcr_datetime(group.game_server)
+            only_check = (membership.last_save_slot == today)
+
+            action = f"{finished + 1}{'补' if is_continue else '整'}刀{'无' if only_check else 'sl'}"
+
+            res += f'\n->{action} {nik}: {info},' if info is not None else f'\n->{action} {nik},'
         return res
 
     def drop_member(self, group_id: Groupid, member_list: List[QQid]):
@@ -378,7 +404,7 @@ class ClanBattle:
         person_num = challenging.count()
         if person_num != 0:
             boss_summary += f'\n{person_num}人正在挑战,'
-            boss_summary += self.get_challenger_info(challenging)
+            boss_summary += self.get_challenger_info(challenging, group_id)
         # 如果有人锁定，也将锁定信息加以显示
         if group.challenging_member_qq_id is not None and group.boss_lock_type != 1:
             boss_summary += '\n{}{}boss'.format(
@@ -540,7 +566,7 @@ class ClanBattle:
             group.boss_num,
             group.boss_health,
             0,
-            msg + self.get_challenger_info(Clan_ischallenging.filter(gid=group_id)),
+            msg + self.get_challenger_info(Clan_ischallenging.filter(gid=group_id), group_id),
         )
         self._boss_status[group_id].set_result(
             (self._boss_data_dict(group), msg)
@@ -1042,7 +1068,7 @@ class ClanBattle:
             group.boss_num,
             group.boss_health,
             qqid,
-            info + self.get_challenger_info(challenging),
+            info + self.get_challenger_info(challenging, group_id),
         )
         self._boss_status[group_id].set_result(
             (self._boss_data_dict(group), status.info)
@@ -1095,7 +1121,7 @@ class ClanBattle:
             group.boss_num,
             group.boss_health,
             0,
-            f'当前正在有{challenging.count()}人正在挑战，' + self.get_challenger_info(challenging),
+            f'当前正在有{challenging.count()}人正在挑战，' + self.get_challenger_info(challenging, group_id),
         )
         self._boss_status[group_id].set_result(
             (self._boss_data_dict(group), status.info)
@@ -1613,7 +1639,7 @@ class ClanBattle:
             try:
                 self.add_subscribe(group_id, user_id, 0, extra_msg)
                 # 如果挂树更新挑战信息
-                action = "挂树ing " + (extra_msg if extra_msg is not None else '')
+                action = "寄 " + (extra_msg if extra_msg is not None else '')
                 self.apply_for_challenge(
                     group_id, user_id, extra_msg=action, appli_type=1)
             except ClanBattleError as e:
