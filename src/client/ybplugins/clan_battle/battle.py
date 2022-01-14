@@ -318,6 +318,29 @@ class ClanBattle:
 
         return membership
 
+    def get_used_info(self, qqid, group_id):
+        group = Clan_group.get_or_none(group_id=group_id)
+        d, t = pcr_datetime(area=group.game_server)
+        challenges = Clan_challenge.select().where(
+            Clan_challenge.gid == group_id,
+            Clan_challenge.qqid == qqid,
+            Clan_challenge.bid == group.battle_id,
+            Clan_challenge.challenge_pcrdate == d,
+        ).order_by(Clan_challenge.cid)
+        challenges = list(challenges)
+        finished = sum(bool(c.boss_health_ramain or c.is_continue)
+                       for c in challenges)
+
+        is_continue = (challenges
+                       and challenges[-1].boss_health_ramain == 0
+                       and not challenges[-1].is_continue)
+
+        membership = Clan_member.get_or_none(
+            group_id=group_id, qqid=qqid)
+        today, _ = pcr_datetime(group.game_server)
+        only_check = (membership.last_save_slot == today)
+        return finished, is_continue, only_check
+
     def get_challenger_info(self, challenging, group_id):
         """
         Args:
@@ -333,27 +356,27 @@ class ClanBattle:
             info = x.message
             # 获取这个人的出刀信息
 
-            group = Clan_group.get_or_none(group_id=group_id)
-            d, t = pcr_datetime(area=group.game_server)
-            challenges = Clan_challenge.select().where(
-                Clan_challenge.gid == group_id,
-                Clan_challenge.qqid == x.qqid,
-                Clan_challenge.bid == group.battle_id,
-                Clan_challenge.challenge_pcrdate == d,
-            ).order_by(Clan_challenge.cid)
-            challenges = list(challenges)
-            finished = sum(bool(c.boss_health_ramain or c.is_continue)
-                           for c in challenges)
-
-            is_continue = (challenges
-                           and challenges[-1].boss_health_ramain == 0
-                           and not challenges[-1].is_continue)
-
-            membership = Clan_member.get_or_none(
-                group_id=group_id, qqid=x.qqid)
-            today, _ = pcr_datetime(group.game_server)
-            only_check = (membership.last_save_slot == today)
-
+            # group = Clan_group.get_or_none(group_id=group_id)
+            # d, t = pcr_datetime(area=group.game_server)
+            # challenges = Clan_challenge.select().where(
+            #     Clan_challenge.gid == group_id,
+            #     Clan_challenge.qqid == x.qqid,
+            #     Clan_challenge.bid == group.battle_id,
+            #     Clan_challenge.challenge_pcrdate == d,
+            # ).order_by(Clan_challenge.cid)
+            # challenges = list(challenges)
+            # finished = sum(bool(c.boss_health_ramain or c.is_continue)
+            #                for c in challenges)
+            #
+            # is_continue = (challenges
+            #                and challenges[-1].boss_health_ramain == 0
+            #                and not challenges[-1].is_continue)
+            #
+            # membership = Clan_member.get_or_none(
+            #     group_id=group_id, qqid=x.qqid)
+            # today, _ = pcr_datetime(group.game_server)
+            # only_check = (membership.last_save_slot == today)
+            finished, is_continue, only_check = self.get_used_info(x.qqid, group_id)
             action = f"{finished + 1}{'补' if is_continue else '整'}刀{'无' if only_check else 'sl'}"
 
             res += f'\n->{action} {nik}: {info},' if info is not None else f'\n->{action} {nik},'
@@ -1438,6 +1461,18 @@ class ClanBattle:
                 _logger.info('群聊 成功 {} {} {}'.format(user_id, group_id, cmd))
                 return '{}已加入本公会'.format(atqq(user_id))
         elif match_num == 3:  # 状态
+            if cmd[:2] == '查刀' and len(cmd) > 2:
+                match = re.match('^查刀 *(?:\[CQ:at,qq=(\d+)\])?$', cmd)
+                if not match:
+                    return
+                behalf = match.group(1) and int(match.group(1))
+                if behalf is None:
+                    return
+                finished, is_continue, only_check = self.get_used_info(behalf, group_id)
+                if finished == 3 and not is_continue:
+                    return "他已经下班了，塔诺西！"
+                else:
+                    return f"他已经出完{finished}刀，手上{'有' if is_continue else '没有'}补偿刀，sl{'已用' if only_check else '还在'}"
             if len(cmd) != 2:
                 return
             if cmd in ['查刀', '报告']:
